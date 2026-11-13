@@ -4,12 +4,6 @@ import {
     ControlType,
     RenderTarget,
 } from "framer"
-import {
-    motion,
-    useScroll,
-    useTransform,
-    MotionValue,
-} from "framer-motion"
 
 /**
  * ScrollFeaturedProjects
@@ -130,13 +124,53 @@ function anchorStyle(anchorX: AnchorX, anchorY: AnchorY, x: number, y: number): 
     return style
 }
 
-// revealStart / revealEnd sont des fractions (0 à 1) de la hauteur totale
-// (`scrollLength`) de la section, pas des pixels : 0.2 = 20% du scroll total.
-function useBand(progress: MotionValue<number>, revealStart: number, revealEnd: number) {
+// Calcule une progression locale (0 à 1) à l'intérieur d'une fenêtre de
+// révélation, elle-même exprimée en fraction (0 à 1) du scroll total.
+function bandProgress(progress: number, revealStart: number, revealEnd: number): number {
     const start = Math.max(0, Math.min(1, revealStart))
     const end = Math.max(start + 0.001, Math.min(1, revealEnd))
-    const opacity = useTransform(progress, [start, end], [0, 1])
-    return { opacity, start, end }
+    return Math.max(0, Math.min(1, (progress - start) / (end - start)))
+}
+
+// Suit le scroll de la page "à la main" (écouteur scroll + resize) plutôt
+// que de passer par les hooks de scroll de framer-motion : certains
+// montages de ces hooks plantent une fois publiés sur un site Framer
+// ("Offsets must be null or in the range [0,1]"), ce calcul l'évite.
+function useManualScrollProgress(ref: React.RefObject<HTMLDivElement>): number {
+    const [progress, setProgress] = React.useState(0)
+
+    React.useEffect(() => {
+        let frame = 0
+
+        const update = () => {
+            frame = 0
+            const el = ref.current
+            if (!el) return
+            const rect = el.getBoundingClientRect()
+            const scrollable = rect.height - window.innerHeight
+            if (scrollable <= 0) {
+                setProgress(rect.top <= 0 ? 1 : 0)
+                return
+            }
+            const p = -rect.top / scrollable
+            setProgress(Math.max(0, Math.min(1, p)))
+        }
+
+        const onScroll = () => {
+            if (!frame) frame = requestAnimationFrame(update)
+        }
+
+        update()
+        window.addEventListener("scroll", onScroll, { passive: true })
+        window.addEventListener("resize", onScroll)
+        return () => {
+            window.removeEventListener("scroll", onScroll)
+            window.removeEventListener("resize", onScroll)
+            if (frame) cancelAnimationFrame(frame)
+        }
+    }, [ref])
+
+    return progress
 }
 
 function RevealStack({
@@ -147,27 +181,30 @@ function RevealStack({
     enterOffset,
 }: {
     slot: StackSlot
-    progress: MotionValue<number>
+    progress: number
     revealStart: number
     revealEnd: number
     enterOffset: number
 }) {
-    const { opacity, start, end } = useBand(progress, revealStart, revealEnd)
-    const translateY = useTransform(progress, [start, end], [enterOffset, 0])
-
     if (!slot.enabled || !slot.component) return null
 
+    const t = bandProgress(progress, revealStart, revealEnd)
+    const anchor = anchorStyle(slot.anchorX, slot.anchorY, slot.x, slot.y)
+    const entranceTransform = `translateY(${enterOffset * (1 - t)}px)`
+
     return (
-        <motion.div
+        <div
             style={{
-                ...anchorStyle(slot.anchorX, slot.anchorY, slot.x, slot.y),
-                opacity,
-                y: translateY,
+                ...anchor,
+                transform: anchor.transform
+                    ? `${anchor.transform} ${entranceTransform}`
+                    : entranceTransform,
+                opacity: t,
                 pointerEvents: "auto",
             }}
         >
             {slot.component}
-        </motion.div>
+        </div>
     )
 }
 
@@ -221,18 +258,10 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
 
     const wrapperRef = React.useRef<HTMLDivElement>(null)
     const isCanvas = RenderTarget.current() === RenderTarget.canvas
+    const progress = useManualScrollProgress(wrapperRef)
 
-    const { scrollYProgress } = useScroll({
-        target: wrapperRef,
-        offset: ["start start", "end end"],
-    })
-
-    const titleBand = useBand(scrollYProgress, titleRevealStart, titleRevealEnd)
-    const titleTop = useTransform(
-        scrollYProgress,
-        [titleBand.start, titleBand.end],
-        [`${titleEnterTopVH}vh`, `${titleRestTopVH}vh`]
-    )
+    const titleT = bandProgress(progress, titleRevealStart, titleRevealEnd)
+    const titleTopVH = titleEnterTopVH + (titleRestTopVH - titleEnterTopVH) * titleT
 
     const stacks: StackSlot[] = [
         {
@@ -346,13 +375,13 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
                     pointerEvents: "none",
                 }}
             >
-                <motion.div
+                <div
                     style={{
                         position: "absolute",
-                        top: titleTop,
+                        top: `${titleTopVH}vh`,
                         left: "50%",
                         transform: "translateX(-50%)",
-                        opacity: titleBand.opacity,
+                        opacity: titleT,
                         color: titleColor,
                         whiteSpace: "nowrap",
                         pointerEvents: "auto",
@@ -360,13 +389,13 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
                     }}
                 >
                     {titleText}
-                </motion.div>
+                </div>
 
                 {stacks.map((slot, i) => (
                     <RevealStack
                         key={i}
                         slot={slot}
-                        progress={scrollYProgress}
+                        progress={progress}
                         revealStart={stacksRevealStart}
                         revealEnd={stacksRevealEnd}
                         enterOffset={stackEnterOffset}
@@ -382,7 +411,7 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
                         anchorX: moreProjectsAnchorX,
                         anchorY: moreProjectsAnchorY,
                     }}
-                    progress={scrollYProgress}
+                    progress={progress}
                     revealStart={moreProjectsRevealStart}
                     revealEnd={moreProjectsRevealEnd}
                     enterOffset={stackEnterOffset}
