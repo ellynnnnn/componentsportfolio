@@ -14,19 +14,24 @@ import {
 /**
  * ScrollFeaturedProjects
  *
- * Section "scrollytelling" pour une page Framer :
- * - Glisse TON composant "Scroll Media" existant dans le slot `scrollMedia`
- *   (vidéo ou séquence d'images) : il reste pinné et défile pendant toute
- *   la longueur de la section.
+ * Section "scrollytelling" à coller DIRECTEMENT sur la page (ne pas la
+ * mettre dans un Stack ou un autre Frame qui "clippe" son contenu : le
+ * composant gère lui-même sa hauteur, son sticky et son scroll).
+ *
+ * - Glisse ton composant "Scroll Media" existant dans le slot `scrollMedia`.
+ *   Il reste pinné et défile pendant toute la longueur de la section.
  * - Le titre apparaît en overlay (fondu + léger déplacement) puis reste
  *   sticky jusqu'à la fin.
- * - Jusqu'à 4 stacks "Project" (tes propres composants, mis en page par
- *   toi) apparaissent ensuite, de la même manière, et restent en place.
- * - Un slot "More Projects" apparaît enfin, en bas à droite par défaut.
- * - Une fois la section terminée, la page reprend un scroll normal.
+ * - Jusqu'à 4 stacks "Project" (tes propres composants) apparaissent
+ *   ensuite, de la même manière, et restent en place.
+ * - Un slot "More Projects" apparaît enfin.
+ * - Une fois la section terminée (hauteur = `scrollLength`), la page
+ *   reprend un scroll normal, automatiquement.
  *
- * Tout le rythme (longueur totale + fenêtres d'apparition) est réglable
- * dans le panneau de droite, en "écrans" (1 = une hauteur de viewport).
+ * Réglages importants pour que ça marche :
+ * - Le calque de ce composant doit être en "Clip content" DÉSACTIVÉ.
+ * - Pas besoin de le redimensionner à la main : `scrollLength` (en px,
+ *   dans le panneau) fixe déjà sa hauteur réelle.
  */
 
 interface FontControl {
@@ -38,18 +43,22 @@ interface FontControl {
     lineHeight?: number | string
 }
 
+type AnchorX = "left" | "center" | "right"
+type AnchorY = "top" | "center" | "bottom"
+
 interface StackSlot {
     component?: React.ReactNode
     enabled: boolean
     x: number
     y: number
-    anchorX: "left" | "center" | "right"
-    anchorY: "top" | "center" | "bottom"
+    anchorX: AnchorX
+    anchorY: AnchorY
 }
 
 interface Props {
+    style?: React.CSSProperties
     scrollMedia?: React.ReactNode
-    totalScreens: number
+    scrollLength: number
 
     titleText: string
     titleFont: FontControl
@@ -59,30 +68,49 @@ interface Props {
     titleRevealStart: number
     titleRevealEnd: number
 
-    project1: StackSlot
-    project2: StackSlot
-    project3: StackSlot
-    project4: StackSlot
+    project1Enabled: boolean
+    project1Component?: React.ReactNode
+    project1X: number
+    project1Y: number
+    project1AnchorX: AnchorX
+    project1AnchorY: AnchorY
+
+    project2Enabled: boolean
+    project2Component?: React.ReactNode
+    project2X: number
+    project2Y: number
+    project2AnchorX: AnchorX
+    project2AnchorY: AnchorY
+
+    project3Enabled: boolean
+    project3Component?: React.ReactNode
+    project3X: number
+    project3Y: number
+    project3AnchorX: AnchorX
+    project3AnchorY: AnchorY
+
+    project4Enabled: boolean
+    project4Component?: React.ReactNode
+    project4X: number
+    project4Y: number
+    project4AnchorX: AnchorX
+    project4AnchorY: AnchorY
+
     stacksRevealStart: number
     stacksRevealEnd: number
     stackEnterOffset: number
 
-    moreProjects?: React.ReactNode
     moreProjectsEnabled: boolean
+    moreProjectsComponent?: React.ReactNode
     moreProjectsX: number
     moreProjectsY: number
-    moreProjectsAnchorX: "left" | "center" | "right"
-    moreProjectsAnchorY: "top" | "center" | "bottom"
+    moreProjectsAnchorX: AnchorX
+    moreProjectsAnchorY: AnchorY
     moreProjectsRevealStart: number
     moreProjectsRevealEnd: number
 }
 
-function anchorStyle(
-    anchorX: StackSlot["anchorX"],
-    anchorY: StackSlot["anchorY"],
-    x: number,
-    y: number
-): React.CSSProperties {
+function anchorStyle(anchorX: AnchorX, anchorY: AnchorY, x: number, y: number): React.CSSProperties {
     const style: React.CSSProperties = { position: "absolute" }
 
     if (anchorX === "left") style.left = x
@@ -102,15 +130,11 @@ function anchorStyle(
     return style
 }
 
-function useBand(
-    progress: MotionValue<number>,
-    startScreen: number,
-    endScreen: number,
-    totalScreens: number
-) {
-    const safeTotal = totalScreens || 1
-    const start = Math.max(0, Math.min(1, startScreen / safeTotal))
-    const end = Math.max(start + 0.0001, Math.min(1, endScreen / safeTotal))
+// revealStart / revealEnd sont des fractions (0 à 1) de la hauteur totale
+// (`scrollLength`) de la section, pas des pixels : 0.2 = 20% du scroll total.
+function useBand(progress: MotionValue<number>, revealStart: number, revealEnd: number) {
+    const start = Math.max(0, Math.min(1, revealStart))
+    const end = Math.max(start + 0.001, Math.min(1, revealEnd))
     const opacity = useTransform(progress, [start, end], [0, 1])
     return { opacity, start, end }
 }
@@ -118,19 +142,17 @@ function useBand(
 function RevealStack({
     slot,
     progress,
-    totalScreens,
     revealStart,
     revealEnd,
     enterOffset,
 }: {
     slot: StackSlot
     progress: MotionValue<number>
-    totalScreens: number
     revealStart: number
     revealEnd: number
     enterOffset: number
 }) {
-    const { opacity, start, end } = useBand(progress, revealStart, revealEnd, totalScreens)
+    const { opacity, start, end } = useBand(progress, revealStart, revealEnd)
     const translateY = useTransform(progress, [start, end], [enterOffset, 0])
 
     if (!slot.enabled || !slot.component) return null
@@ -149,10 +171,10 @@ function RevealStack({
     )
 }
 
-export default function ScrollFeaturedProjects(props: Props) {
+export default function ScrollFeaturedProjects({ style, ...props }: Props) {
     const {
         scrollMedia,
-        totalScreens,
+        scrollLength,
         titleText,
         titleFont,
         titleColor,
@@ -160,15 +182,35 @@ export default function ScrollFeaturedProjects(props: Props) {
         titleEnterTopVH,
         titleRevealStart,
         titleRevealEnd,
-        project1,
-        project2,
-        project3,
-        project4,
+        project1Enabled,
+        project1Component,
+        project1X,
+        project1Y,
+        project1AnchorX,
+        project1AnchorY,
+        project2Enabled,
+        project2Component,
+        project2X,
+        project2Y,
+        project2AnchorX,
+        project2AnchorY,
+        project3Enabled,
+        project3Component,
+        project3X,
+        project3Y,
+        project3AnchorX,
+        project3AnchorY,
+        project4Enabled,
+        project4Component,
+        project4X,
+        project4Y,
+        project4AnchorX,
+        project4AnchorY,
         stacksRevealStart,
         stacksRevealEnd,
         stackEnterOffset,
-        moreProjects,
         moreProjectsEnabled,
+        moreProjectsComponent,
         moreProjectsX,
         moreProjectsY,
         moreProjectsAnchorX,
@@ -185,14 +227,47 @@ export default function ScrollFeaturedProjects(props: Props) {
         offset: ["start start", "end end"],
     })
 
-    const titleBand = useBand(scrollYProgress, titleRevealStart, titleRevealEnd, totalScreens)
+    const titleBand = useBand(scrollYProgress, titleRevealStart, titleRevealEnd)
     const titleTop = useTransform(
         scrollYProgress,
         [titleBand.start, titleBand.end],
         [`${titleEnterTopVH}vh`, `${titleRestTopVH}vh`]
     )
 
-    const stacks: StackSlot[] = [project1, project2, project3, project4]
+    const stacks: StackSlot[] = [
+        {
+            component: project1Component,
+            enabled: project1Enabled,
+            x: project1X,
+            y: project1Y,
+            anchorX: project1AnchorX,
+            anchorY: project1AnchorY,
+        },
+        {
+            component: project2Component,
+            enabled: project2Enabled,
+            x: project2X,
+            y: project2Y,
+            anchorX: project2AnchorX,
+            anchorY: project2AnchorY,
+        },
+        {
+            component: project3Component,
+            enabled: project3Enabled,
+            x: project3X,
+            y: project3Y,
+            anchorX: project3AnchorX,
+            anchorY: project3AnchorY,
+        },
+        {
+            component: project4Component,
+            enabled: project4Enabled,
+            x: project4X,
+            y: project4Y,
+            anchorX: project4AnchorX,
+            anchorY: project4AnchorY,
+        },
+    ]
 
     // Dans l'éditeur Framer (canvas), on affiche un aperçu statique en état
     // "final" pour pouvoir composer la mise en page sans avoir à scroller.
@@ -200,9 +275,10 @@ export default function ScrollFeaturedProjects(props: Props) {
         return (
             <div
                 style={{
+                    ...style,
                     position: "relative",
                     width: "100%",
-                    height: "100%",
+                    height: style?.height ?? "100%",
                     overflow: "hidden",
                     background: "#eee",
                 }}
@@ -228,7 +304,7 @@ export default function ScrollFeaturedProjects(props: Props) {
                         </div>
                     ) : null
                 )}
-                {moreProjectsEnabled && moreProjects ? (
+                {moreProjectsEnabled && moreProjectsComponent ? (
                     <div
                         style={anchorStyle(
                             moreProjectsAnchorX,
@@ -237,7 +313,7 @@ export default function ScrollFeaturedProjects(props: Props) {
                             moreProjectsY
                         )}
                     >
-                        {moreProjects}
+                        {moreProjectsComponent}
                     </div>
                 ) : null}
             </div>
@@ -248,9 +324,10 @@ export default function ScrollFeaturedProjects(props: Props) {
         <div
             ref={wrapperRef}
             style={{
+                ...style,
                 position: "relative",
                 width: "100%",
-                height: `${Math.max(totalScreens, 1) * 100}vh`,
+                height: scrollLength,
             }}
         >
             {/* Fond : ton composant Scroll Media, pinné + scrubé sur toute la durée */}
@@ -290,7 +367,6 @@ export default function ScrollFeaturedProjects(props: Props) {
                         key={i}
                         slot={slot}
                         progress={scrollYProgress}
-                        totalScreens={totalScreens}
                         revealStart={stacksRevealStart}
                         revealEnd={stacksRevealEnd}
                         enterOffset={stackEnterOffset}
@@ -299,7 +375,7 @@ export default function ScrollFeaturedProjects(props: Props) {
 
                 <RevealStack
                     slot={{
-                        component: moreProjects,
+                        component: moreProjectsComponent,
                         enabled: moreProjectsEnabled,
                         x: moreProjectsX,
                         y: moreProjectsY,
@@ -307,7 +383,6 @@ export default function ScrollFeaturedProjects(props: Props) {
                         anchorY: moreProjectsAnchorY,
                     }}
                     progress={scrollYProgress}
-                    totalScreens={totalScreens}
                     revealStart={moreProjectsRevealStart}
                     revealEnd={moreProjectsRevealEnd}
                     enterOffset={stackEnterOffset}
@@ -318,65 +393,84 @@ export default function ScrollFeaturedProjects(props: Props) {
 }
 
 ScrollFeaturedProjects.defaultProps = {
-    totalScreens: 10,
+    scrollLength: 4000,
     titleText: "Featured Projects",
     titleColor: "#111111",
     titleRestTopVH: 10,
     titleEnterTopVH: 15,
-    titleRevealStart: 2,
-    titleRevealEnd: 3,
-    stacksRevealStart: 4,
-    stacksRevealEnd: 5,
+    titleRevealStart: 0.15,
+    titleRevealEnd: 0.25,
+    project1Enabled: true,
+    project1X: 48,
+    project1Y: 96,
+    project1AnchorX: "left",
+    project1AnchorY: "top",
+    project2Enabled: true,
+    project2X: 48,
+    project2Y: 96,
+    project2AnchorX: "right",
+    project2AnchorY: "top",
+    project3Enabled: true,
+    project3X: 0,
+    project3Y: 48,
+    project3AnchorX: "center",
+    project3AnchorY: "bottom",
+    project4Enabled: false,
+    project4X: 48,
+    project4Y: 48,
+    project4AnchorX: "left",
+    project4AnchorY: "bottom",
+    stacksRevealStart: 0.35,
+    stacksRevealEnd: 0.45,
     stackEnterOffset: 24,
     moreProjectsEnabled: true,
     moreProjectsX: 48,
     moreProjectsY: 48,
     moreProjectsAnchorX: "right",
     moreProjectsAnchorY: "bottom",
-    moreProjectsRevealStart: 8,
-    moreProjectsRevealEnd: 9,
+    moreProjectsRevealStart: 0.75,
+    moreProjectsRevealEnd: 0.85,
 }
 
-function stackControls(label: string, defaults: Partial<StackSlot>) {
+function projectControls(label: string) {
     return {
-        type: ControlType.Object,
-        title: label,
-        controls: {
-            enabled: {
-                type: ControlType.Boolean,
-                title: "Actif",
-                defaultValue: defaults.enabled ?? false,
-            },
-            component: {
-                type: ControlType.ComponentInstance,
-                title: "Stack",
-            },
-            x: {
-                type: ControlType.Number,
-                title: "X",
-                defaultValue: defaults.x ?? 0,
-            },
-            y: {
-                type: ControlType.Number,
-                title: "Y",
-                defaultValue: defaults.y ?? 0,
-            },
-            anchorX: {
-                type: ControlType.Enum,
-                title: "Ancrage X",
-                options: ["left", "center", "right"],
-                optionTitles: ["Gauche", "Centre", "Droite"],
-                defaultValue: defaults.anchorX ?? "left",
-            },
-            anchorY: {
-                type: ControlType.Enum,
-                title: "Ancrage Y",
-                options: ["top", "center", "bottom"],
-                optionTitles: ["Haut", "Centre", "Bas"],
-                defaultValue: defaults.anchorY ?? "top",
-            },
+        Enabled: {
+            type: ControlType.Boolean,
+            title: `${label} — actif`,
+        },
+        Component: {
+            type: ControlType.ComponentInstance,
+            title: label,
+        },
+        X: {
+            type: ControlType.Number,
+            title: `${label} — X`,
+        },
+        Y: {
+            type: ControlType.Number,
+            title: `${label} — Y`,
+        },
+        AnchorX: {
+            type: ControlType.Enum,
+            title: `${label} — ancrage X`,
+            options: ["left", "center", "right"],
+            optionTitles: ["Gauche", "Centre", "Droite"],
+        },
+        AnchorY: {
+            type: ControlType.Enum,
+            title: `${label} — ancrage Y`,
+            options: ["top", "center", "bottom"],
+            optionTitles: ["Haut", "Centre", "Bas"],
         },
     }
+}
+
+function withPrefix(prefix: string, controls: Record<string, any>) {
+    const out: Record<string, any> = {}
+    for (const key in controls) {
+        out[`${prefix}${key}`] = controls[key]
+    }
+    return out
 }
 
 addPropertyControls(ScrollFeaturedProjects, {
@@ -384,13 +478,13 @@ addPropertyControls(ScrollFeaturedProjects, {
         type: ControlType.ComponentInstance,
         title: "Scroll Media",
     },
-    totalScreens: {
+    scrollLength: {
         type: ControlType.Number,
-        title: "Durée totale (écrans)",
-        min: 2,
-        max: 40,
-        step: 1,
-        defaultValue: 10,
+        title: "Durée totale (px)",
+        min: 800,
+        max: 20000,
+        step: 100,
+        defaultValue: 4000,
     },
 
     titleText: {
@@ -426,36 +520,41 @@ addPropertyControls(ScrollFeaturedProjects, {
     },
     titleRevealStart: {
         type: ControlType.Number,
-        title: "Titre : début (écran)",
+        title: "Titre : début (0-1)",
         min: 0,
-        step: 0.1,
-        defaultValue: 2,
+        max: 1,
+        step: 0.01,
+        defaultValue: 0.15,
     },
     titleRevealEnd: {
         type: ControlType.Number,
-        title: "Titre : fin (écran)",
+        title: "Titre : fin (0-1)",
         min: 0,
-        step: 0.1,
-        defaultValue: 3,
+        max: 1,
+        step: 0.01,
+        defaultValue: 0.25,
     },
 
-    project1: stackControls("Project 1", { enabled: true, x: 48, y: 96, anchorX: "left", anchorY: "top" }),
-    project2: stackControls("Project 2", { enabled: true, x: 48, y: 96, anchorX: "right", anchorY: "top" }),
-    project3: stackControls("Project 3", { enabled: true, x: 0, y: 48, anchorX: "center", anchorY: "bottom" }),
-    project4: stackControls("Project 4", { enabled: false, x: 48, y: 48, anchorX: "left", anchorY: "bottom" }),
+    ...withPrefix("project1", projectControls("Project 1")),
+    ...withPrefix("project2", projectControls("Project 2")),
+    ...withPrefix("project3", projectControls("Project 3")),
+    ...withPrefix("project4", projectControls("Project 4")),
+
     stacksRevealStart: {
         type: ControlType.Number,
-        title: "Stacks : début (écran)",
+        title: "Stacks : début (0-1)",
         min: 0,
-        step: 0.1,
-        defaultValue: 4,
+        max: 1,
+        step: 0.01,
+        defaultValue: 0.35,
     },
     stacksRevealEnd: {
         type: ControlType.Number,
-        title: "Stacks : fin (écran)",
+        title: "Stacks : fin (0-1)",
         min: 0,
-        step: 0.1,
-        defaultValue: 5,
+        max: 1,
+        step: 0.01,
+        defaultValue: 0.45,
     },
     stackEnterOffset: {
         type: ControlType.Number,
@@ -465,14 +564,14 @@ addPropertyControls(ScrollFeaturedProjects, {
         defaultValue: 24,
     },
 
-    moreProjects: {
-        type: ControlType.ComponentInstance,
-        title: "More Projects",
-    },
     moreProjectsEnabled: {
         type: ControlType.Boolean,
         title: "More Projects actif",
         defaultValue: true,
+    },
+    moreProjectsComponent: {
+        type: ControlType.ComponentInstance,
+        title: "More Projects",
     },
     moreProjectsX: {
         type: ControlType.Number,
@@ -500,16 +599,18 @@ addPropertyControls(ScrollFeaturedProjects, {
     },
     moreProjectsRevealStart: {
         type: ControlType.Number,
-        title: "More Projects : début (écran)",
+        title: "More Projects : début (0-1)",
         min: 0,
-        step: 0.1,
-        defaultValue: 8,
+        max: 1,
+        step: 0.01,
+        defaultValue: 0.75,
     },
     moreProjectsRevealEnd: {
         type: ControlType.Number,
-        title: "More Projects : fin (écran)",
+        title: "More Projects : fin (0-1)",
         min: 0,
-        step: 0.1,
-        defaultValue: 9,
+        max: 1,
+        step: 0.01,
+        defaultValue: 0.85,
     },
 })
