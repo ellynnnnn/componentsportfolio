@@ -534,7 +534,7 @@ ScrollFeaturedProjects.defaultProps = {
     project4AnchorX: "left",
     project4AnchorY: "bottom",
     stacksRevealStart: 0.35,
-    stacksRevealEnd: 0.45,
+    stacksRevealEnd: 0.6,
     stackEnterOffset: 24,
     edgeMargin: 4,
     moreProjectsEnabled: true,
@@ -678,7 +678,7 @@ addPropertyControls(ScrollFeaturedProjects, {
         min: 0,
         max: 1,
         step: 0.01,
-        defaultValue: 0.45,
+        defaultValue: 0.6,
     },
     stackEnterOffset: {
         type: ControlType.Number,
