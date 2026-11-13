@@ -95,6 +95,7 @@ interface Props {
     stacksRevealStart: number
     stacksRevealEnd: number
     stackEnterOffset: number
+    edgeMargin: number
 
     moreProjectsEnabled: boolean
     moreProjectsComponent?: React.ReactNode
@@ -106,11 +107,21 @@ interface Props {
     moreProjectsRevealEnd: number
 }
 
-function anchorStyle(anchorX: AnchorX, anchorY: AnchorY, x: number, y: number): React.CSSProperties {
+function anchorStyle(
+    anchorX: AnchorX,
+    anchorY: AnchorY,
+    x: number,
+    y: number,
+    edgeMargin: number
+): React.CSSProperties {
     const style: React.CSSProperties = { position: "absolute" }
 
-    if (anchorX === "left") style.left = x
-    else if (anchorX === "right") style.right = x
+    // max(Xpx, marge%) : garde le réglage fin en pixels sur grand écran,
+    // mais garantit une marge mini proportionnelle à la largeur sur les
+    // écrans étroits, pour que les cartes ne se retrouvent jamais collées
+    // au bord (au lieu d'un simple décalage fixe non responsive).
+    if (anchorX === "left") style.left = `max(${x}px, ${edgeMargin}%)`
+    else if (anchorX === "right") style.right = `max(${x}px, ${edgeMargin}%)`
     else {
         style.left = `calc(50% + ${x}px)`
         style.transform = "translateX(-50%)"
@@ -216,17 +227,19 @@ function RevealStack({
     revealStart,
     revealEnd,
     enterOffset,
+    edgeMargin,
 }: {
     slot: StackSlot
     progress: number
     revealStart: number
     revealEnd: number
     enterOffset: number
+    edgeMargin: number
 }) {
     if (!slot.enabled || !slot.component) return null
 
     const t = bandProgress(progress, revealStart, revealEnd)
-    const anchor = anchorStyle(slot.anchorX, slot.anchorY, slot.x, slot.y)
+    const anchor = anchorStyle(slot.anchorX, slot.anchorY, slot.x, slot.y, edgeMargin)
     const entranceTransform = `translateY(${enterOffset * (1 - t)}px)`
 
     return (
@@ -285,6 +298,7 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
         stacksRevealStart,
         stacksRevealEnd,
         stackEnterOffset,
+        edgeMargin,
         moreProjectsEnabled,
         moreProjectsComponent,
         moreProjectsX,
@@ -379,7 +393,10 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
                 </div>
                 {stacks.map((slot, i) =>
                     slot.enabled && slot.component ? (
-                        <div key={i} style={anchorStyle(slot.anchorX, slot.anchorY, slot.x, slot.y)}>
+                        <div
+                            key={i}
+                            style={anchorStyle(slot.anchorX, slot.anchorY, slot.x, slot.y, edgeMargin)}
+                        >
                             {slot.component}
                         </div>
                     ) : null
@@ -390,7 +407,8 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
                             moreProjectsAnchorX,
                             moreProjectsAnchorY,
                             moreProjectsX,
-                            moreProjectsY
+                            moreProjectsY,
+                            edgeMargin
                         )}
                     >
                         {moreProjectsComponent}
@@ -461,6 +479,7 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
                         revealStart={stacksRevealStart}
                         revealEnd={stacksRevealEnd}
                         enterOffset={stackEnterOffset}
+                        edgeMargin={edgeMargin}
                     />
                 ))}
 
@@ -477,6 +496,7 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
                     revealStart={moreProjectsRevealStart}
                     revealEnd={moreProjectsRevealEnd}
                     enterOffset={stackEnterOffset}
+                    edgeMargin={edgeMargin}
                 />
             </div>
         </div>
@@ -516,6 +536,7 @@ ScrollFeaturedProjects.defaultProps = {
     stacksRevealStart: 0.35,
     stacksRevealEnd: 0.45,
     stackEnterOffset: 24,
+    edgeMargin: 4,
     moreProjectsEnabled: true,
     moreProjectsX: 48,
     moreProjectsY: 48,
@@ -665,6 +686,14 @@ addPropertyControls(ScrollFeaturedProjects, {
         min: 0,
         max: 200,
         defaultValue: 24,
+    },
+    edgeMargin: {
+        type: ControlType.Number,
+        title: "Marge mini depuis les bords (%)",
+        min: 0,
+        max: 20,
+        step: 0.5,
+        defaultValue: 4,
     },
 
     moreProjectsEnabled: {
