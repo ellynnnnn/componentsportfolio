@@ -52,6 +52,8 @@ interface StackSlot {
 interface Props {
     style?: React.CSSProperties
     scrollMedia?: React.ReactNode
+    scrollMediaX: number
+    scrollMediaY: number
     scrollLength: number
 
     titleText: string
@@ -246,6 +248,8 @@ function RevealStack({
 export default function ScrollFeaturedProjects({ style, ...props }: Props) {
     const {
         scrollMedia,
+        scrollMediaX,
+        scrollMediaY,
         scrollLength,
         titleText,
         titleFont,
@@ -347,7 +351,19 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
                     background: "#eee",
                 }}
             >
-                <div style={{ position: "absolute", inset: 0 }}>{scrollMedia}</div>
+                <div
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
+                    <div style={{ transform: `translate(${scrollMediaX}px, ${scrollMediaY}px)` }}>
+                        {scrollMedia}
+                    </div>
+                </div>
                 <div
                     style={{
                         position: "absolute",
@@ -395,9 +411,21 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
             }}
         >
             {/* Fond : ton composant Scroll Media, pinné (en JS, même mécanisme que
-                l'overlay) + scrubé sur toute la durée */}
-            <div style={{ ...pinStyle, height: "100vh", overflow: "hidden" }}>
-                {scrollMedia}
+                l'overlay) + scrubé sur toute la durée. Centré, avec un décalage
+                X/Y réglable pour l'ajuster finement. */}
+            <div
+                style={{
+                    ...pinStyle,
+                    height: "100vh",
+                    overflow: "hidden",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                }}
+            >
+                <div style={{ transform: `translate(${scrollMediaX}px, ${scrollMediaY}px)` }}>
+                    {scrollMedia}
+                </div>
             </div>
 
             {/* Overlay pinné en JS : reste visible sur un seul écran pendant toute l'animation */}
@@ -456,6 +484,8 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
 }
 
 ScrollFeaturedProjects.defaultProps = {
+    scrollMediaX: 0,
+    scrollMediaY: 0,
     scrollLength: 4000,
     titleText: "Featured Projects",
     titleColor: "#111111",
@@ -540,6 +570,16 @@ addPropertyControls(ScrollFeaturedProjects, {
     scrollMedia: {
         type: ControlType.ComponentInstance,
         title: "Scroll Media",
+    },
+    scrollMediaX: {
+        type: ControlType.Number,
+        title: "Scroll Media — décalage X",
+        defaultValue: 0,
+    },
+    scrollMediaY: {
+        type: ControlType.Number,
+        title: "Scroll Media — décalage Y",
+        defaultValue: 0,
     },
     scrollLength: {
         type: ControlType.Number,
