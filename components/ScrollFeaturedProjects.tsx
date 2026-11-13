@@ -132,12 +132,25 @@ function bandProgress(progress: number, revealStart: number, revealEnd: number):
     return Math.max(0, Math.min(1, (progress - start) / (end - start)))
 }
 
+interface ScrollTrack {
+    progress: number
+    pinStyle: React.CSSProperties
+}
+
 // Suit le scroll de la page "à la main" (écouteur scroll + resize) plutôt
 // que de passer par les hooks de scroll de framer-motion : certains
 // montages de ces hooks plantent une fois publiés sur un site Framer
 // ("Offsets must be null or in the range [0,1]"), ce calcul l'évite.
-function useManualScrollProgress(ref: React.RefObject<HTMLDivElement>): number {
-    const [progress, setProgress] = React.useState(0)
+//
+// Le "pin" de l'overlay est aussi calculé ici, en `position: fixed` tant
+// qu'on est dans la zone de scroll, plutôt qu'en `position: sticky` :
+// Framer insère parfois un conteneur parent avec un `overflow` qui casse
+// le sticky natif, alors qu'un `fixed` piloté en JS reste fiable.
+function useScrollTrack(ref: React.RefObject<HTMLDivElement>): ScrollTrack {
+    const [state, setState] = React.useState<ScrollTrack>({
+        progress: 0,
+        pinStyle: { position: "absolute", top: 0, left: 0, width: "100%" },
+    })
 
     React.useEffect(() => {
         let frame = 0
@@ -146,14 +159,36 @@ function useManualScrollProgress(ref: React.RefObject<HTMLDivElement>): number {
             frame = 0
             const el = ref.current
             if (!el) return
+
             const rect = el.getBoundingClientRect()
-            const scrollable = rect.height - window.innerHeight
-            if (scrollable <= 0) {
-                setProgress(rect.top <= 0 ? 1 : 0)
-                return
+            const vh = window.innerHeight
+            const scrollable = rect.height - vh
+
+            const progress =
+                scrollable <= 0
+                    ? rect.top <= 0
+                        ? 1
+                        : 0
+                    : Math.max(0, Math.min(1, -rect.top / scrollable))
+
+            let pinStyle: React.CSSProperties
+            if (rect.top > 0) {
+                // Pas encore atteint : l'overlay suit le haut du composant.
+                pinStyle = { position: "absolute", top: 0, left: 0, width: "100%" }
+            } else if (rect.bottom <= vh) {
+                // Durée de scroll écoulée : l'overlay se détache en bas du composant.
+                pinStyle = { position: "absolute", bottom: 0, left: 0, width: "100%" }
+            } else {
+                // En cours : l'overlay reste pinné à l'écran.
+                pinStyle = {
+                    position: "fixed",
+                    top: 0,
+                    left: rect.left,
+                    width: rect.width,
+                }
             }
-            const p = -rect.top / scrollable
-            setProgress(Math.max(0, Math.min(1, p)))
+
+            setState({ progress, pinStyle })
         }
 
         const onScroll = () => {
@@ -170,7 +205,7 @@ function useManualScrollProgress(ref: React.RefObject<HTMLDivElement>): number {
         }
     }, [ref])
 
-    return progress
+    return state
 }
 
 function RevealStack({
@@ -258,7 +293,7 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
 
     const wrapperRef = React.useRef<HTMLDivElement>(null)
     const isCanvas = RenderTarget.current() === RenderTarget.canvas
-    const progress = useManualScrollProgress(wrapperRef)
+    const { progress, pinStyle } = useScrollTrack(wrapperRef)
 
     const titleT = bandProgress(progress, titleRevealStart, titleRevealEnd)
     const titleTopVH = titleEnterTopVH + (titleRestTopVH - titleEnterTopVH) * titleT
@@ -364,12 +399,10 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
                 {scrollMedia}
             </div>
 
-            {/* Overlay sticky : reste visible sur un seul écran pendant toute l'animation */}
+            {/* Overlay pinné en JS : reste visible sur un seul écran pendant toute l'animation */}
             <div
                 style={{
-                    position: "sticky",
-                    top: 0,
-                    width: "100%",
+                    ...pinStyle,
                     height: "100vh",
                     overflow: "hidden",
                     pointerEvents: "none",
