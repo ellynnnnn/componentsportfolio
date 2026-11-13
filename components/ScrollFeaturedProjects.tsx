@@ -394,8 +394,9 @@ export default function ScrollFeaturedProjects({ style, ...props }: Props) {
                 height: scrollLength,
             }}
         >
-            {/* Fond : ton composant Scroll Media, pinné + scrubé sur toute la durée */}
-            <div style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+            {/* Fond : ton composant Scroll Media, pinné (en JS, même mécanisme que
+                l'overlay) + scrubé sur toute la durée */}
+            <div style={{ ...pinStyle, height: "100vh", overflow: "hidden" }}>
                 {scrollMedia}
             </div>
 
